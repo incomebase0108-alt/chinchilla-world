@@ -60,25 +60,27 @@
 
   /* ---------- D-pad ---------- */
   #dpad {
-    position: absolute; right: 18px; bottom: 22px;
-    width: 174px; height: 174px;
+    position: absolute; right: 16px; bottom: 24px;
+    width: 210px; height: 210px;
     display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
     gap: 8px; z-index: 5;
   }
   .dbtn {
     pointer-events: auto; cursor: pointer; border: none; color: #fff;
-    background: var(--panel); border: 1px solid var(--panel-line);
-    border-radius: 16px; font-size: 26px; line-height: 1; font-weight: 900;
+    background: linear-gradient(180deg, rgba(70,45,115,.92), rgba(40,25,70,.92));
+    border: 1.5px solid rgba(255,255,255,.22);
+    border-radius: 18px; font-size: 34px; line-height: 1; font-weight: 900;
     display: flex; align-items: center; justify-content: center;
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
     transition: transform .06s ease, background .12s ease;
   }
-  .dbtn:active { transform: scale(0.9); background: var(--pink-deep); }
+  .dbtn:active { transform: scale(0.88); background: var(--pink-deep); }
   .dbtn.up { grid-area: 1 / 2; }
   .dbtn.left { grid-area: 2 / 1; }
   .dbtn.right { grid-area: 2 / 3; }
   .dbtn.down { grid-area: 3 / 2; }
-  .dbtn.mid { grid-area: 2 / 2; background: transparent; border: none; }
+  .dbtn.mid { grid-area: 2 / 2; background: transparent; border: none; box-shadow: none; pointer-events: none; }
 
   /* ---------- Screens / overlays ---------- */
   .screen {
@@ -146,15 +148,25 @@
   @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 
   .toast {
-    position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
-    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 999px;
-    padding: 8px 16px; font-size: 13px; font-weight: 700; z-index: 15; opacity: 0;
-    transition: opacity .25s ease; pointer-events: none; white-space: nowrap;
+    position: absolute; left: 50%; top: 60px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 16px;
+    padding: 9px 16px; font-size: 13px; font-weight: 800; z-index: 15; opacity: 0;
+    transition: opacity .25s ease; pointer-events: none; text-align: center;
+    max-width: min(90vw, 420px); line-height: 1.5;
   }
   .toast.show { opacity: 1; }
+  .toast.danger {
+    background: linear-gradient(135deg, #ff5e7a, #ff2f86); border-color: transparent;
+    color: #fff; box-shadow: 0 8px 24px rgba(255,47,134,.5); font-size: 14px;
+  }
+  @keyframes btnpulse {
+    0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,211,77,.0); }
+    50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(255,211,77,.45); }
+  }
+  .btn.pulse { animation: btnpulse 0.7s ease-in-out infinite; border-color: var(--gold); }
   .credit { position: absolute; bottom: 8px; left: 12px; font-size: 11px; opacity: .45; z-index: 4; }
   @media (max-width: 480px) {
-    #dpad { width: 150px; height: 150px; right: 12px; bottom: 16px; }
+    #dpad { width: 186px; height: 186px; right: 12px; bottom: 18px; }
     .credit { display: none; }
   }
 </style>
@@ -221,8 +233,8 @@
   <div class="spacer"></div>
   <div class="pill"><small>手数</small> <span id="moves">0</span></div>
   <div class="pill"><small>巣</small> <span id="prog">0/0</span></div>
-  <button class="btn" id="hudUndo">↩ 戻す</button>
-  <button class="btn" id="hudReset">⟳</button>
+  <button class="btn primary" id="hudUndo">↩ もどす</button>
+  <button class="btn" id="hudReset">⟳ やりなおし</button>
 </div>
 
 <!-- D-pad -->
@@ -245,7 +257,7 @@ import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 // ====== Model locations (local copies — no external dependency) ======
 const BASE = './models/';
-const PLAYER_MODEL = 'mob_queen_sakura.glb';
+const PLAYER_MODEL = 'player_chinchilla_grey.glb';
 const CHINCHILLA_MODELS = [
   'pet_chinchilla_brown.glb',
   'pet_chinchilla_grey.glb',
@@ -266,21 +278,28 @@ const LEVELS = {
   easy: [
     { name: 'やさしい巣作り', grid: ['#######','#_____#','#_.___#','#_$@__#','#_____#','#######'] },
     { name: 'まっすぐ押す',   grid: ['#######','#__.__#','#__$__#','#__@__#','#_____#','#######'] },
+    { name: 'かどを曲がる',   grid: ['#######','#.____#','#_____#','#_$@__#','#_____#','#######'] },
     { name: 'ふたごの巣',     grid: ['########','#______#','#_.__._#','#_$__$_#','#__@___#','#______#','########'] },
+    { name: '壁ぎわ注意',     grid: ['#######','#._##_#','#_$___#','#__@__#','#_____#','#######'] },
   ],
   normal: [
-    { name: 'かどを曲がる',   grid: ['#######','#.____#','#_____#','#_$@__#','#_____#','#######'] },
     { name: 'みっつ並べて',   grid: ['#########','#__...__#','#_______#','#__$$$__#','#___@___#','#_______#','#########'] },
     { name: 'よっつの角',     grid: ['#######','#.___.#','#_____#','#_$_$_#','#__@__#','#_$_$_#','#.___.#','#######'] },
+    { name: '仕切り壁',       grid: ['#######','#.___.#','#_$_$_#','#_#_#_#','#__@__#','#######'] },
+    { name: 'ジグザグ',       grid: ['#########','#_._._._#','#_$_$_$_#','#_______#','#___@___#','#########'] },
+    { name: '横並びの巣',     grid: ['########','#._.__.#','#_$_$_$#','#______#','#___@__#','########'] },
   ],
   hard: [
     { name: 'よっつの巣',     grid: ['########','#.____.#','#______#','#_$__$_#','#__@___#','#_$__$_#','#.____.#','########'] },
     { name: 'せまい部屋',     grid: ['########','#..__###','#$$__@_#','#____#_#','#____$_#','#____.##','########'] },
-    { name: 'ジグザグ',       grid: ['#########','#_._._._#','#_$_$_$_#','#_______#','#___@___#','#########'] },
+    { name: '中央の障害',     grid: ['########','#._@__.#','#_$__$_#','#__##__#','#__##__#','#_$__$_#','#.____.#','########'] },
+    { name: '十字路',         grid: ['#########','#._____.#','#_$___$_#','#__#_#__#','#_$___$_#','#.__@__.#','#########'] },
+    { name: '五つの試練',     grid: ['#########','#_....._#','#_______#','#_$$$$$_#','#_______#','#___@___#','#########'] },
   ],
   oni: [
-    { name: '鬼の倉庫',       grid: ['##########','#_......_#','#________#','#_$$$$$$_#','#________#','#___@____#','#________#','##########'] },
-    { name: '四隅の試練',     grid: ['#########','#._____.#','#_______#','#__$_$__#','#___@___#','#__$_$__#','#_______#','#._____.#','#########'] },
+    { name: '六連の巣',       grid: ['#############','#.#.#.#.#.#.#','#_#_#_#_#_#_#','#$#$#$#$#$#$#','#___________#','#_____@_____#','#############'] },
+    { name: '四隅と中庭',     grid: ['#########','#._____.#','#_______#','#__$_$__#','#___@___#','#__$_$__#','#_______#','#._____.#','#########'] },
+    { name: '巨石の周り',     grid: ['##########','#.______.#','#_$____$_#','#__####__#','#__####__#','#_$____$_#','#.______.#','#___@____#','##########'] },
     { name: '六色の試練',     grid: ['##########','#_...____#','#________#','#_$$$____#','#___@____#','#____$$$_#','#________#','#____..._#','##########'] },
   ],
 };
@@ -427,8 +446,42 @@ function makePlayerMarker() {
   cone.position.y = CELL * 1.5;
   cone.castShadow = false;
   g.add(cone);
-  g.userData.ring = ring; g.userData.cone = cone;
+  // floating "さくら" label so the player is unmistakable (grey body can resemble a grey box)
+  const label = makeLabelSprite('さくら');
+  label.position.y = CELL * 2.0;
+  g.add(label);
+  g.userData.ring = ring; g.userData.cone = cone; g.userData.label = label;
   return g;
+}
+
+// Canvas-based text sprite (no external font needed)
+function makeLabelSprite(text) {
+  const pad = 16, fs = 64;
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.font = `900 ${fs}px "Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  c.width = w; c.height = fs + pad * 2;
+  const x = c.width / 2, y = c.height / 2;
+  ctx.font = `900 ${fs}px "Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // rounded pink pill background
+  ctx.fillStyle = 'rgba(255,79,158,0.92)';
+  const r = c.height / 2;
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.lineTo(c.width - r, 0);
+  ctx.arc(c.width - r, r, r, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(r, c.height); ctx.arc(r, r, r, Math.PI / 2, -Math.PI / 2);
+  ctx.fill();
+  ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff';
+  ctx.strokeText(text, x, y); ctx.fillText(text, x, y);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  const scale = 0.95;
+  sprite.scale.set(scale * (c.width / c.height), scale, 1);
+  sprite.renderOrder = 999;
+  return sprite;
 }
 
 // ====== Game state ======
@@ -510,6 +563,8 @@ function buildLevel(diff, stage) {
   fitCamera();
   refreshHUD();
   document.getElementById('stageName').textContent = `${DIFFS.find(d => d.id === diff).label} ${stage + 1}・${def.name}`;
+  const n = state.boxes.length;
+  toast(`チンチラ ${n}匹 を 黄色い巣に入れよう！　▲◀▼▶ で移動`, 2600);
 }
 
 function fitCamera() {
@@ -577,7 +632,7 @@ function tryMove(dirName) {
     movedBox.r = br; movedBox.c = bc;
   }
   state.moves++;
-  onAnimEnd = () => { refreshHUD(); checkWin(); };
+  onAnimEnd = () => { refreshHUD(); if (!checkWin()) checkDeadlock(); };
 }
 
 let onAnimEnd = null;
@@ -604,6 +659,19 @@ function undo() {
 function checkWin() {
   const win = state.boxes.every(b => state.goals.has(cellKey(b.r, b.c)));
   if (win) setTimeout(() => showClear(), 280);
+  return win;
+}
+
+// A cell a box can never leave: wall/void on a vertical side AND on a horizontal side (corner).
+function blockedCell(r, c) { return state.walls.has(cellKey(r, c)) || isVoid(r, c); }
+function checkDeadlock() {
+  const stuck = state.boxes.some(b => {
+    if (state.goals.has(cellKey(b.r, b.c))) return false; // a box on its goal is fine
+    const v = blockedCell(b.r - 1, b.c) || blockedCell(b.r + 1, b.c);
+    const h = blockedCell(b.r, b.c - 1) || blockedCell(b.r, b.c + 1);
+    return v && h;
+  });
+  if (stuck) showDeadlock();
 }
 
 // ====== Screens ======
@@ -667,10 +735,22 @@ function showClear() {
 
 // ====== Toast ======
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+  t.textContent = msg; t.classList.remove('danger'); t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 1400);
+}
+// Shown when a chinchilla is wedged into a corner and can never move again.
+function showDeadlock() {
+  const t = document.getElementById('toast');
+  t.textContent = '😣 チンチラが角で動けなく…「↩ もどす」か「⟳ やりなおし」!';
+  t.classList.add('show', 'danger');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show', 'danger'), 3600);
+  // pulse the recovery buttons so it's obvious how to recover
+  ['hudUndo', 'hudReset'].forEach(id => {
+    const b = document.getElementById(id);
+    b.classList.add('pulse'); setTimeout(() => b.classList.remove('pulse'), 3600);
+  });
 }
 
 // ====== Input ======
