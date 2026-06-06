@@ -596,8 +596,32 @@ function isVoid(r, c) {
   return ch === undefined || ch === ' ';
 }
 
-function tryMove(dirName) {
+// Convert an on-screen intent (up/down/left/right relative to the VIEW) into a grid
+// direction, so controls always match what the player sees even after rotating the camera.
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _wish = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
+function screenToGrid(intent) {
+  camera.getWorldDirection(_fwd); _fwd.y = 0;            // where the camera looks (into screen)
+  if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, -1);
+  _fwd.normalize();
+  _right.crossVectors(_fwd, _UP).normalize();            // screen-right on the ground
+  if (intent === 'up') _wish.copy(_fwd);
+  else if (intent === 'down') _wish.copy(_fwd).negate();
+  else if (intent === 'right') _wish.copy(_right);
+  else _wish.copy(_right).negate();                      // left
+  // snap to the nearest grid axis: up=(0,-1) down=(0,1) left=(-1,0) right=(1,0) in (x,z)
+  const cand = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  let best = 'up', bestDot = -Infinity;
+  for (const k in cand) {
+    const d = _wish.x * cand[k][0] + _wish.z * cand[k][1];
+    if (d > bestDot) { bestDot = d; best = k; }
+  }
+  return best;
+}
+
+function tryMove(intent) {
   if (!state || state.animating || menuVisible()) return;
+  const dirName = screenToGrid(intent);
   const [dr, dc] = DIRS[dirName];
   const p = state.player;
   const nr = p.r + dr, nc = p.c + dc;
