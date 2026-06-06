@@ -637,8 +637,10 @@ function tryMove(dirName) {
 
 let onAnimEnd = null;
 function faceDir(obj, dr, dc) {
-  const target = Math.atan2(dc, dr); // grid +r is -z direction; this gives a consistent facing
-  obj.userData.targetRot = target;
+  // These chinchilla GLB models face -Z by default (same convention as the source voxel-world,
+  // which orients every model with rotation.y = atan2(-dx, -dz)). Movement maps to world
+  // (x = +col, z = +row), so face the travel direction with atan2(-dc, -dr).
+  obj.userData.targetRot = Math.atan2(-dc, -dr);
 }
 
 function undo() {
