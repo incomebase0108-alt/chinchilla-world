@@ -89,6 +89,8 @@
     backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
   }
   .screen.hidden { display: none; }
+  /* generic hide used by #loader / #hud / #dpad too (needs !important to beat their flex/grid display) */
+  .hidden { display: none !important; }
   .title {
     font-size: clamp(30px, 8vw, 56px); font-weight: 900; letter-spacing: 1px;
     background: linear-gradient(135deg, #fff, var(--pink) 55%, var(--gold));
