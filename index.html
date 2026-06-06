@@ -455,6 +455,9 @@ function buildLevel(diff, stage) {
   const walls = new Set(), goals = new Set();
   const boxes = []; let player = null;
 
+  // state must exist BEFORE the parse loop because worldX()/worldZ() read state.cols/rows.
+  state = { diff, stage, rows, cols, walls, goals, boxes, player: null, moves: 0, history: [], animating: false };
+
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const ch = grid[r][c] || ' ';
@@ -503,7 +506,7 @@ function buildLevel(diff, stage) {
     }
   }
 
-  state = { diff, stage, rows, cols, walls, goals, boxes, player, moves: 0, history: [], animating: false };
+  state.player = player;
   fitCamera();
   refreshHUD();
   document.getElementById('stageName').textContent = `${DIFFS.find(d => d.id === diff).label} ${stage + 1}・${def.name}`;
