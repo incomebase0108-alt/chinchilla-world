@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#1a1030" />
+<title>チンチラ倉庫番 — Chinchilla Sokoban</title>
+<style>
+  :root {
+    --pink: #ff7ab8;
+    --pink-deep: #ff4f9e;
+    --gold: #ffd34d;
+    --panel: rgba(28, 18, 48, 0.82);
+    --panel-line: rgba(255, 255, 255, 0.14);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #140c26;
+    color: #fff;
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; pointer-events: none;
+    background: linear-gradient(to bottom, rgba(10,6,20,0.55), rgba(10,6,20,0));
+  }
+  #hud .spacer { flex: 1; }
+  .pill {
+    pointer-events: auto;
+    background: var(--panel); border: 1px solid var(--panel-line);
+    border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .pill small { font-weight: 600; opacity: .75; }
+  button.btn {
+    pointer-events: auto; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--panel-line); color: #fff;
+    border-radius: 999px; padding: 9px 14px; font-size: 14px; font-weight: 800;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    transition: transform .08s ease, background .15s ease;
+  }
+  button.btn:active { transform: scale(0.94); }
+  button.btn.primary {
+    background: linear-gradient(135deg, var(--pink), var(--pink-deep));
+    border-color: transparent; box-shadow: 0 6px 18px rgba(255,79,158,.4);
+  }
+  button.btn.gold {
+    background: linear-gradient(135deg, #ffe27a, var(--gold));
+    border-color: transparent; color: #5a3d00; box-shadow: 0 6px 18px rgba(255,211,77,.4);
+  }
+
+  /* ---------- D-pad ---------- */
+  #dpad {
+    position: absolute; right: 18px; bottom: 22px;
+    width: 174px; height: 174px;
+    display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+    gap: 8px; z-index: 5;
+  }
+  .dbtn {
+    pointer-events: auto; cursor: pointer; border: none; color: #fff;
+    background: var(--panel); border: 1px solid var(--panel-line);
+    border-radius: 16px; font-size: 26px; line-height: 1; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    transition: transform .06s ease, background .12s ease;
+  }
+  .dbtn:active { transform: scale(0.9); background: var(--pink-deep); }
+  .dbtn.up { grid-area: 1 / 2; }
+  .dbtn.left { grid-area: 2 / 1; }
+  .dbtn.right { grid-area: 2 / 3; }
+  .dbtn.down { grid-area: 3 / 2; }
+  .dbtn.mid { grid-area: 2 / 2; background: transparent; border: none; }
+
+  /* ---------- Screens / overlays ---------- */
+  .screen {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 24px; text-align: center;
+    background: radial-gradient(120% 120% at 50% 0%, rgba(60,30,90,.65), rgba(12,7,24,.92));
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  }
+  .screen.hidden { display: none; }
+  .title {
+    font-size: clamp(30px, 8vw, 56px); font-weight: 900; letter-spacing: 1px;
+    background: linear-gradient(135deg, #fff, var(--pink) 55%, var(--gold));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 4px 30px rgba(255,122,184,.25);
+    margin: 0;
+  }
+  .subtitle { font-size: clamp(13px, 3.4vw, 16px); opacity: .85; margin: -6px 0 4px; font-weight: 600; }
+  .card {
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 22px;
+    padding: 18px 20px; max-width: 560px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .card h2 { margin: 2px 0 14px; font-size: 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .choice {
+    cursor: pointer; border-radius: 16px; padding: 12px 16px; font-weight: 800; font-size: 15px;
+    border: 1px solid var(--panel-line); background: rgba(255,255,255,.06); color: #fff;
+    transition: transform .08s ease, background .15s ease, border-color .15s ease;
+  }
+  .choice:active { transform: scale(.95); }
+  .choice.active { background: linear-gradient(135deg, var(--pink), var(--pink-deep)); border-color: transparent; }
+  .stage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; margin-top: 4px; }
+  .stage {
+    cursor: pointer; position: relative; border-radius: 14px; padding: 14px 8px; font-weight: 800;
+    border: 1px solid var(--panel-line); background: rgba(255,255,255,.06); color: #fff; font-size: 14px;
+    display: flex; flex-direction: column; gap: 4px; align-items: center;
+    transition: transform .08s ease, background .15s ease;
+  }
+  .stage:active { transform: scale(.95); }
+  .stage .num { font-size: 22px; font-weight: 900; }
+  .stage .nm { font-size: 11px; opacity: .8; font-weight: 600; }
+  .stage .clear { position: absolute; top: 6px; right: 8px; color: var(--gold); font-size: 14px; }
+  .hint { font-size: 12.5px; opacity: .7; line-height: 1.7; max-width: 520px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px 18px; justify-content: center; font-size: 12.5px; opacity: .85; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+  .dot.pink { background: var(--pink); box-shadow: 0 0 8px var(--pink); }
+  .dot.gold { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+  .dot.brown { background: #9a6b3f; }
+
+  .clear-emoji { font-size: 64px; animation: pop .6s ease; }
+  @keyframes pop { 0% { transform: scale(0); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  .stars { font-size: 30px; color: var(--gold); letter-spacing: 6px; }
+
+  #loader {
+    position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; background: #140c26;
+  }
+  #loader .bar { width: min(70vw, 280px); height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #loader .bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--pink), var(--gold)); transition: width .2s ease; }
+  #loader .spin { font-size: 46px; animation: float 1.6s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+  .toast {
+    position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--panel-line); border-radius: 999px;
+    padding: 8px 16px; font-size: 13px; font-weight: 700; z-index: 15; opacity: 0;
+    transition: opacity .25s ease; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+  .credit { position: absolute; bottom: 8px; left: 12px; font-size: 11px; opacity: .45; z-index: 4; }
+  @media (max-width: 480px) {
+    #dpad { width: 150px; height: 150px; right: 12px; bottom: 16px; }
+    .credit { display: none; }
+  }
+</style>
+<!-- Three.js via CDN import map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- Loading -->
+<div id="loader">
+  <div class="spin">🐭</div>
+  <div style="font-weight:800;font-size:16px;">チンチラを よびあつめています…</div>
+  <div class="bar"><i id="loadbar"></i></div>
+  <div id="loadtxt" style="font-size:12px;opacity:.6;">0 / 7</div>
+</div>
+
+<!-- Title / difficulty + stage select -->
+<div id="menu" class="screen hidden">
+  <h1 class="title">チンチラ倉庫番</h1>
+  <div class="subtitle">Chinchilla Sokoban — さくらと巣作りパズル</div>
+  <div class="card">
+    <h2>むずかしさを えらぶ</h2>
+    <div id="diffRow" class="row"></div>
+    <div id="stageWrap" style="margin-top:16px;">
+      <div class="stage-grid" id="stageGrid"></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i class="dot pink"></i> さくら（あなた）</span>
+    <span><i class="dot brown"></i> チンチラ（押す）</span>
+    <span><i class="dot gold"></i> 巣（ゴール）</span>
+  </div>
+  <div class="hint">
+    矢印キー / WASD、または画面右下の十字キーで さくら を動かします。<br>
+    チンチラを ぜんぶ 黄色い巣（光る輪）に入れたら クリア！ <b>U</b>=ひとつ戻す / <b>R</b>=やりなおし
+  </div>
+</div>
+
+<!-- Clear overlay -->
+<div id="clear" class="screen hidden">
+  <div class="clear-emoji">🎉</div>
+  <h1 class="title" style="font-size:clamp(26px,7vw,44px);">クリア！</h1>
+  <div class="stars" id="clearStars">★★★</div>
+  <div id="clearInfo" class="subtitle"></div>
+  <div class="row">
+    <button class="btn gold" id="nextBtn">つぎのステージ ▶</button>
+    <button class="btn" id="retryBtn">もう一度</button>
+    <button class="btn" id="toMenuBtn">ステージ選択</button>
+  </div>
+</div>
+
+<!-- In-game HUD -->
+<div id="hud" class="hidden">
+  <button class="btn" id="hudMenu">☰ 選択</button>
+  <div class="pill" id="stageName">—</div>
+  <div class="spacer"></div>
+  <div class="pill"><small>手数</small> <span id="moves">0</span></div>
+  <div class="pill"><small>巣</small> <span id="prog">0/0</span></div>
+  <button class="btn" id="hudUndo">↩ 戻す</button>
+  <button class="btn" id="hudReset">⟳</button>
+</div>
+
+<!-- D-pad -->
+<div id="dpad" class="hidden">
+  <button class="dbtn up" data-dir="up">▲</button>
+  <button class="dbtn left" data-dir="left">◀</button>
+  <button class="dbtn mid"></button>
+  <button class="dbtn right" data-dir="right">▶</button>
+  <button class="dbtn down" data-dir="down">▼</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="credit">さくら & 6いろのチンチラ — Three.js</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+
+// ====== Model locations (local copies — no external dependency) ======
+const BASE = './models/';
+const PLAYER_MODEL = 'mob_queen_sakura.glb';
+const CHINCHILLA_MODELS = [
+  'pet_chinchilla_brown.glb',
+  'pet_chinchilla_grey.glb',
+  'pet_chinchilla_white.glb',
+  'pet_chinchilla_beige.glb',
+  'pet_chinchilla_sapphire.glb',
+  'pet_chinchilla_violet.glb',
+];
+
+// ====== Levels (every stage verified solvable) ======
+const DIFFS = [
+  { id: 'easy',   label: 'かんたん',   emoji: '🌱' },
+  { id: 'normal', label: 'ふつう',     emoji: '🍀' },
+  { id: 'hard',   label: 'むずかしい', emoji: '🔥' },
+  { id: 'oni',    label: 'おに',       emoji: '👹' },
+];
+const LEVELS = {
+  easy: [
+    { name: 'やさしい巣作り', grid: ['#######','#_____#','#_.___#','#_$@__#','#_____#','#######'] },
+    { name: 'まっすぐ押す',   grid: ['#######','#__.__#','#__$__#','#__@__#','#_____#','#######'] },
+    { name: 'ふたごの巣',     grid: ['########','#______#','#_.__._#','#_$__$_#','#__@___#','#______#','########'] },
+  ],
+  normal: [
+    { name: 'かどを曲がる',   grid: ['#######','#.____#','#_____#','#_$@__#','#_____#','#######'] },
+    { name: 'みっつ並べて',   grid: ['#########','#__...__#','#_______#','#__$$$__#','#___@___#','#_______#','#########'] },
+    { name: 'よっつの角',     grid: ['#######','#.___.#','#_____#','#_$_$_#','#__@__#','#_$_$_#','#.___.#','#######'] },
+  ],
+  hard: [
+    { name: 'よっつの巣',     grid: ['########','#.____.#','#______#','#_$__$_#','#__@___#','#_$__$_#','#.____.#','########'] },
+    { name: 'せまい部屋',     grid: ['########','#..__###','#$$__@_#','#____#_#','#____$_#','#____.##','########'] },
+    { name: 'ジグザグ',       grid: ['#########','#_._._._#','#_$_$_$_#','#_______#','#___@___#','#########'] },
+  ],
+  oni: [
+    { name: '鬼の倉庫',       grid: ['##########','#_......_#','#________#','#_$$$$$$_#','#________#','#___@____#','#________#','##########'] },
+    { name: '四隅の試練',     grid: ['#########','#._____.#','#_______#','#__$_$__#','#___@___#','#__$_$__#','#_______#','#._____.#','#########'] },
+    { name: '六色の試練',     grid: ['##########','#_...____#','#________#','#_$$$____#','#___@____#','#____$$$_#','#________#','#____..._#','##########'] },
+  ],
+};
+
+// ====== Persistence ======
+const SAVE_KEY = 'chinchilla-sokoban-clears-v1';
+function loadClears() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; } }
+function saveClear(diff, stage) {
+  const c = loadClears(); const k = diff + ':' + stage;
+  if (!c[k]) { c[k] = true; localStorage.setItem(SAVE_KEY, JSON.stringify(c)); }
+}
+function isCleared(diff, stage) { return !!loadClears()[diff + ':' + stage]; }
+
+// ====== Three.js scene ======
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1030);
+scene.fog = new THREE.Fog(0x1a1030, 16, 42);
+
+const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minPolarAngle = 0.15;
+controls.maxPolarAngle = Math.PI * 0.46;
+controls.minDistance = 5;
+controls.maxDistance = 30;
+
+// Lights
+const hemi = new THREE.HemisphereLight(0xffe7f4, 0x2a1840, 0.95);
+scene.add(hemi);
+const key = new THREE.DirectionalLight(0xfff2e0, 1.5);
+key.position.set(6, 12, 6);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -16; key.shadow.camera.right = 16;
+key.shadow.camera.top = 16; key.shadow.camera.bottom = -16;
+key.shadow.camera.near = 1; key.shadow.camera.far = 60;
+key.shadow.bias = -0.0004;
+scene.add(key);
+const rim = new THREE.DirectionalLight(0xff8fcf, 0.5);
+rim.position.set(-8, 6, -6);
+scene.add(rim);
+
+const CELL = 1.6;        // world units per grid cell
+const WALL_H = 1.15;
+
+// Materials reused across levels
+const floorMatA = new THREE.MeshStandardMaterial({ color: 0x4a3a6e, roughness: 0.95, metalness: 0 });
+const floorMatB = new THREE.MeshStandardMaterial({ color: 0x564580, roughness: 0.95, metalness: 0 });
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x6b4aa0, roughness: 0.7, metalness: 0.05 });
+const wallTopMat = new THREE.MeshStandardMaterial({ color: 0x8a64c8, roughness: 0.6 });
+const tileGeo = new THREE.BoxGeometry(CELL * 0.98, 0.2, CELL * 0.98);
+const wallGeo = new THREE.BoxGeometry(CELL, WALL_H, CELL);
+
+let levelGroup = new THREE.Group();
+scene.add(levelGroup);
+
+// Prepared (normalized) model templates
+const templates = { player: null, chinchillas: [] };
+
+// ====== Model loading & normalization ======
+const loader = new GLTFLoader();
+function loadGLB(url) {
+  return new Promise((res, rej) => loader.load(url, g => res(g), undefined, e => rej(e)));
+}
+// Scale & seat a model so its footprint fits `target` and it sits on y=0.
+function normalize(root, target) {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const maxXZ = Math.max(size.x, size.z) || 1;
+  const s = target / maxXZ;
+  root.scale.setScalar(s);
+  const box2 = new THREE.Box3().setFromObject(root);
+  const c = new THREE.Vector3(); box2.getCenter(c);
+  root.position.x -= c.x;
+  root.position.z -= c.z;
+  root.position.y -= box2.min.y;
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+}
+
+async function loadAllModels(onProgress) {
+  let done = 0;
+  const total = 1 + CHINCHILLA_MODELS.length;
+  const bump = () => onProgress(++done, total);
+
+  const pg = await loadGLB(BASE + PLAYER_MODEL);
+  const proot = new THREE.Group(); proot.add(pg.scene);
+  normalize(proot, CELL * 0.92);
+  templates.player = proot;
+  bump();
+
+  for (const file of CHINCHILLA_MODELS) {
+    const g = await loadGLB(BASE + file);
+    const root = new THREE.Group(); root.add(g.scene);
+    normalize(root, CELL * 0.78);
+    templates.chinchillas.push(root);
+    bump();
+  }
+}
+
+// ====== Goal ring / player markers ======
+function makeGoalRing() {
+  const g = new THREE.Group();
+  const ringGeo = new THREE.RingGeometry(CELL * 0.30, CELL * 0.44, 40);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.14;
+  g.add(ring);
+  const glowGeo = new THREE.CircleGeometry(CELL * 0.30, 32);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xfff0a8, transparent: true, opacity: 0.18, side: THREE.DoubleSide });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.rotation.x = -Math.PI / 2; glow.position.y = 0.13;
+  g.add(glow);
+  const light = new THREE.PointLight(0xffd34d, 0.6, CELL * 2.4, 2);
+  light.position.y = 0.4; g.add(light);
+  g.userData.ring = ring; g.userData.glow = glow;
+  return g;
+}
+
+function makePlayerMarker() {
+  const g = new THREE.Group();
+  // pink glowing ring at feet
+  const ringGeo = new THREE.RingGeometry(CELL * 0.34, CELL * 0.5, 44);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff7ab8, transparent: true, opacity: 0.95, side: THREE.DoubleSide });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.16;
+  g.add(ring);
+  const light = new THREE.PointLight(0xff7ab8, 0.8, CELL * 2.6, 2);
+  light.position.y = 0.5; g.add(light);
+  // overhead floating marker (downward arrow / pin)
+  const coneGeo = new THREE.ConeGeometry(CELL * 0.16, CELL * 0.3, 4);
+  const coneMat = new THREE.MeshStandardMaterial({ color: 0xff4f9e, emissive: 0xff2f86, emissiveIntensity: 0.7, roughness: 0.4 });
+  const cone = new THREE.Mesh(coneGeo, coneMat);
+  cone.rotation.x = Math.PI; // point down
+  cone.position.y = CELL * 1.5;
+  cone.castShadow = false;
+  g.add(cone);
+  g.userData.ring = ring; g.userData.cone = cone;
+  return g;
+}
+
+// ====== Game state ======
+const DIRS = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] };
+let state = null; // { diff, stage, rows, cols, walls(Set), goals(Set), boxes[{r,c,obj,marker?}], player{r,c,obj,marker}, moves, history[], animating, busy }
+
+function cellKey(r, c) { return r + ',' + c; }
+function worldX(c) { return (c - state.cols / 2 + 0.5) * CELL; }
+function worldZ(r) { return (r - state.rows / 2 + 0.5) * CELL; }
+
+function clearLevelGroup() {
+  scene.remove(levelGroup);
+  levelGroup.traverse(o => { if (o.geometry && o.geometry !== tileGeo && o.geometry !== wallGeo) o.geometry.dispose?.(); });
+  levelGroup = new THREE.Group();
+  scene.add(levelGroup);
+}
+
+function buildLevel(diff, stage) {
+  clearLevelGroup();
+  const def = LEVELS[diff][stage];
+  const grid = def.grid;
+  const rows = grid.length;
+  const cols = Math.max(...grid.map(r => r.length));
+  const walls = new Set(), goals = new Set();
+  const boxes = []; let player = null;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const ch = grid[r][c] || ' ';
+      if (ch === ' ') continue; // void
+      if (ch === '#') { walls.add(cellKey(r, c)); }
+      const isGoal = (ch === '.' || ch === '*' || ch === '+');
+      const isBox = (ch === '$' || ch === '*');
+      const isPlayer = (ch === '@' || ch === '+');
+      // floor tile (everything except wall & void gets a tile)
+      if (ch !== '#') {
+        const tile = new THREE.Mesh(tileGeo, (r + c) % 2 ? floorMatA : floorMatB);
+        tile.position.set(worldX(c), 0, worldZ(r));
+        tile.receiveShadow = true;
+        levelGroup.add(tile);
+      } else {
+        const w = new THREE.Mesh(wallGeo, wallMat);
+        w.position.set(worldX(c), WALL_H / 2, worldZ(r));
+        w.castShadow = true; w.receiveShadow = true;
+        levelGroup.add(w);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(CELL, 0.12, CELL), wallTopMat);
+        cap.position.set(worldX(c), WALL_H + 0.06, worldZ(r));
+        cap.castShadow = true; levelGroup.add(cap);
+      }
+      if (isGoal) {
+        goals.add(cellKey(r, c));
+        const ring = makeGoalRing();
+        ring.position.set(worldX(c), 0, worldZ(r));
+        levelGroup.add(ring);
+      }
+      if (isBox) {
+        const idx = boxes.length;
+        const obj = cloneSkeleton(templates.chinchillas[idx % templates.chinchillas.length]);
+        obj.position.set(worldX(c), 0.1, worldZ(r));
+        obj.rotation.y = Math.random() * Math.PI * 2;
+        levelGroup.add(obj);
+        boxes.push({ r, c, obj });
+      }
+      if (isPlayer) {
+        const obj = cloneSkeleton(templates.player);
+        obj.position.set(worldX(c), 0.1, worldZ(r));
+        const marker = makePlayerMarker();
+        marker.position.set(worldX(c), 0, worldZ(r));
+        levelGroup.add(obj); levelGroup.add(marker);
+        player = { r, c, obj, marker };
+      }
+    }
+  }
+
+  state = { diff, stage, rows, cols, walls, goals, boxes, player, moves: 0, history: [], animating: false };
+  fitCamera();
+  refreshHUD();
+  document.getElementById('stageName').textContent = `${DIFFS.find(d => d.id === diff).label} ${stage + 1}・${def.name}`;
+}
+
+function fitCamera() {
+  const w = state.cols * CELL, h = state.rows * CELL;
+  const radius = Math.max(w, h) * 0.5;
+  const dist = radius / Math.tan((camera.fov * Math.PI / 180) / 2) + radius * 0.6;
+  controls.target.set(0, 0.3, 0);
+  const dir = new THREE.Vector3(0, 0.92, 0.95).normalize();
+  camera.position.copy(dir.multiplyScalar(dist * 0.92));
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+function refreshHUD() {
+  document.getElementById('moves').textContent = state.moves;
+  const onGoal = state.boxes.filter(b => state.goals.has(cellKey(b.r, b.c))).length;
+  document.getElementById('prog').textContent = `${onGoal}/${state.boxes.length}`;
+}
+
+// ====== Movement with animation ======
+const tweens = [];
+function tween(obj, key, from, to, dur, arc) {
+  tweens.push({ obj, key, from, to, dur, t: 0, arc: arc || 0 });
+}
+function boxAt(r, c) { return state.boxes.find(b => b.r === r && b.c === c); }
+function isWall(r, c) { return state.walls.has(cellKey(r, c)); }
+function isVoid(r, c) {
+  const ch = (LEVELS[state.diff][state.stage].grid[r] || '')[c];
+  return ch === undefined || ch === ' ';
+}
+
+function tryMove(dirName) {
+  if (!state || state.animating || menuVisible()) return;
+  const [dr, dc] = DIRS[dirName];
+  const p = state.player;
+  const nr = p.r + dr, nc = p.c + dc;
+  if (isWall(nr, nc) || isVoid(nr, nc)) { faceDir(p.obj, dr, dc); return; }
+  const pushed = boxAt(nr, nc);
+  let movedBox = null;
+  if (pushed) {
+    const br = nr + dr, bc = nc + dc;
+    if (isWall(br, bc) || isVoid(br, bc) || boxAt(br, bc)) { faceDir(p.obj, dr, dc); return; }
+    movedBox = pushed;
+  }
+  // record history for undo
+  state.history.push({
+    pr: p.r, pc: p.c,
+    box: movedBox ? { ref: movedBox, r: movedBox.r, c: movedBox.c } : null,
+  });
+
+  faceDir(p.obj, dr, dc);
+  state.animating = true;
+  const dur = 0.14;
+  // player
+  tween(p.obj.position, 'x', worldX(p.c), worldX(nc), dur, 0.18);
+  tween(p.obj.position, 'z', worldZ(p.r), worldZ(nr), dur, 0.18);
+  tween(p.marker.position, 'x', worldX(p.c), worldX(nc), dur);
+  tween(p.marker.position, 'z', worldZ(p.r), worldZ(nr), dur);
+  p.r = nr; p.c = nc;
+  if (movedBox) {
+    const br = nr + dr, bc = nc + dc;
+    faceDir(movedBox.obj, dr, dc);
+    tween(movedBox.obj.position, 'x', worldX(movedBox.c), worldX(bc), dur, 0.12);
+    tween(movedBox.obj.position, 'z', worldZ(movedBox.r), worldZ(br), dur, 0.12);
+    movedBox.r = br; movedBox.c = bc;
+  }
+  state.moves++;
+  onAnimEnd = () => { refreshHUD(); checkWin(); };
+}
+
+let onAnimEnd = null;
+function faceDir(obj, dr, dc) {
+  const target = Math.atan2(dc, dr); // grid +r is -z direction; this gives a consistent facing
+  obj.userData.targetRot = target;
+}
+
+function undo() {
+  if (!state || state.animating || state.history.length === 0) return;
+  const h = state.history.pop();
+  const p = state.player;
+  p.r = h.pr; p.c = h.pc;
+  p.obj.position.set(worldX(p.c), p.obj.position.y, worldZ(p.r));
+  p.marker.position.set(worldX(p.c), 0, worldZ(p.r));
+  if (h.box) {
+    h.box.ref.r = h.box.r; h.box.ref.c = h.box.c;
+    h.box.ref.obj.position.set(worldX(h.box.c), h.box.ref.obj.position.y, worldZ(h.box.r));
+  }
+  state.moves = Math.max(0, state.moves - 1);
+  refreshHUD();
+}
+
+function checkWin() {
+  const win = state.boxes.every(b => state.goals.has(cellKey(b.r, b.c)));
+  if (win) setTimeout(() => showClear(), 280);
+}
+
+// ====== Screens ======
+const elMenu = document.getElementById('menu');
+const elClear = document.getElementById('clear');
+const elHud = document.getElementById('hud');
+const elDpad = document.getElementById('dpad');
+function menuVisible() { return !elMenu.classList.contains('hidden') || !elClear.classList.contains('hidden'); }
+function show(el) { el.classList.remove('hidden'); }
+function hide(el) { el.classList.add('hidden'); }
+
+let selDiff = 'easy';
+function renderMenu() {
+  const diffRow = document.getElementById('diffRow');
+  diffRow.innerHTML = '';
+  DIFFS.forEach(d => {
+    const b = document.createElement('button');
+    b.className = 'choice' + (d.id === selDiff ? ' active' : '');
+    b.innerHTML = `${d.emoji} ${d.label}`;
+    b.onclick = () => { selDiff = d.id; renderMenu(); };
+    diffRow.appendChild(b);
+  });
+  const grid = document.getElementById('stageGrid');
+  grid.innerHTML = '';
+  LEVELS[selDiff].forEach((lv, i) => {
+    const cleared = isCleared(selDiff, i);
+    const s = document.createElement('button');
+    s.className = 'stage';
+    s.innerHTML = `${cleared ? '<span class="clear">★</span>' : ''}<span class="num">${i + 1}</span><span class="nm">${lv.name}</span>`;
+    s.onclick = () => startStage(selDiff, i);
+    grid.appendChild(s);
+  });
+}
+
+function startStage(diff, stage) {
+  selDiff = diff;
+  hide(elMenu); hide(elClear);
+  show(elHud); show(elDpad);
+  buildLevel(diff, stage);
+}
+function openMenu() {
+  hide(elClear); hide(elHud); hide(elDpad);
+  renderMenu(); show(elMenu);
+}
+function showClear() {
+  saveClear(state.diff, state.stage);
+  const def = LEVELS[state.diff][state.stage];
+  document.getElementById('clearInfo').textContent = `${def.name}　手数 ${state.moves}`;
+  // stars by efficiency (purely cosmetic)
+  let stars = 3;
+  const b = state.boxes.length;
+  if (state.moves > b * 14) stars = 2;
+  if (state.moves > b * 26) stars = 1;
+  document.getElementById('clearStars').textContent = '★★★☆☆☆'.slice(3 - stars, 6 - stars);
+  const hasNext = state.stage + 1 < LEVELS[state.diff].length;
+  document.getElementById('nextBtn').style.display = hasNext ? '' : 'none';
+  hide(elHud); hide(elDpad);
+  show(elClear);
+  renderMenu();
+}
+
+// ====== Toast ======
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+// ====== Input ======
+window.addEventListener('keydown', e => {
+  const map = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right',
+  };
+  if (map[e.key]) { e.preventDefault(); tryMove(map[e.key]); }
+  else if (e.key === 'u' || e.key === 'U' || e.key === 'z' || e.key === 'Z') undo();
+  else if (e.key === 'r' || e.key === 'R') { if (state) buildLevel(state.diff, state.stage); }
+  else if (e.key === 'Escape') openMenu();
+});
+document.querySelectorAll('.dbtn[data-dir]').forEach(btn => {
+  const dir = btn.dataset.dir;
+  const fire = (e) => { e.preventDefault(); e.stopPropagation(); tryMove(dir); };
+  btn.addEventListener('touchstart', fire, { passive: false });
+  btn.addEventListener('mousedown', fire);
+});
+document.getElementById('hudMenu').onclick = openMenu;
+document.getElementById('hudUndo').onclick = undo;
+document.getElementById('hudReset').onclick = () => { if (state) buildLevel(state.diff, state.stage); };
+document.getElementById('nextBtn').onclick = () => startStage(state.diff, state.stage + 1);
+document.getElementById('retryBtn').onclick = () => startStage(state.diff, state.stage);
+document.getElementById('toMenuBtn').onclick = openMenu;
+
+// ====== Resize ======
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+// ====== Render loop ======
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  // tweens
+  if (tweens.length) {
+    for (let i = tweens.length - 1; i >= 0; i--) {
+      const tw = tweens[i];
+      tw.t += dt;
+      let k = Math.min(tw.t / tw.dur, 1);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // easeInOutQuad
+      tw.obj[tw.key] = tw.from + (tw.to - tw.from) * e;
+      if (tw.arc) tw.obj.y = 0.1 + Math.sin(k * Math.PI) * tw.arc;
+      if (k >= 1) tweens.splice(i, 1);
+    }
+    if (tweens.length === 0 && state && state.animating) {
+      state.animating = false;
+      const cb = onAnimEnd; onAnimEnd = null; cb && cb();
+    }
+  }
+
+  // smooth facing rotation
+  if (state) {
+    const rotables = [state.player.obj, ...state.boxes.map(b => b.obj)];
+    rotables.forEach(o => {
+      if (o.userData.targetRot !== undefined) {
+        let cur = o.rotation.y, tgt = o.userData.targetRot;
+        let diff = ((tgt - cur + Math.PI) % (Math.PI * 2)) - Math.PI;
+        o.rotation.y = cur + diff * Math.min(1, dt * 12);
+      }
+    });
+    // marker bob + ring pulse
+    const m = state.player.marker;
+    if (m.userData.cone) m.userData.cone.position.y = CELL * 1.5 + Math.sin(t * 3) * 0.12;
+    if (m.userData.ring) m.userData.ring.material.opacity = 0.75 + Math.sin(t * 4) * 0.2;
+    levelGroup.children.forEach(ch => {
+      if (ch.userData && ch.userData.ring && ch.userData.glow) {
+        const sc = 1 + Math.sin(t * 2.4 + ch.position.x) * 0.06;
+        ch.userData.ring.scale.setScalar(sc);
+        ch.userData.glow.material.opacity = 0.12 + (Math.sin(t * 2.4 + ch.position.x) * 0.5 + 0.5) * 0.14;
+      }
+    });
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ====== Boot ======
+async function boot() {
+  resize();
+  animate();
+  try {
+    await loadAllModels((done, total) => {
+      document.getElementById('loadbar').style.width = (done / total * 100) + '%';
+      document.getElementById('loadtxt').textContent = `${done} / ${total}`;
+    });
+  } catch (err) {
+    document.getElementById('loader').innerHTML =
+      '<div style="max-width:320px;text-align:center;padding:20px;">' +
+      '<div style="font-size:40px;">😿</div>' +
+      '<p style="font-weight:800;">モデルの読み込みに失敗しました</p>' +
+      '<p style="font-size:12px;opacity:.7;">models/ フォルダの .glb ファイルを確認してください。</p></div>';
+    console.error(err);
+    return;
+  }
+  hide(document.getElementById('loader'));
+  renderMenu();
+  show(elMenu);
+}
+boot();
+</script>
+</body>
+</html>
