@@ -82,6 +82,31 @@
   .dbtn.down { grid-area: 3 / 2; }
   .dbtn.mid { grid-area: 2 / 2; background: transparent; border: none; box-shadow: none; pointer-events: none; }
 
+  /* ---------- Bottom-left big action buttons ---------- */
+  #actions {
+    position: absolute; left: 16px; bottom: 24px; z-index: 5;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .actbtn {
+    pointer-events: auto; cursor: pointer; color: #fff;
+    width: 96px; height: 64px; border-radius: 18px;
+    border: 1.5px solid rgba(255,255,255,.22);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font-size: 26px; font-weight: 900; line-height: 1;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    transition: transform .06s ease, filter .12s ease;
+  }
+  .actbtn span { font-size: 12px; font-weight: 800; }
+  .actbtn:active { transform: scale(0.9); }
+  .actbtn.undo { background: linear-gradient(135deg, var(--pink), var(--pink-deep)); border-color: transparent; }
+  .actbtn.reset { background: linear-gradient(180deg, rgba(70,45,115,.92), rgba(40,25,70,.92)); }
+  .actbtn.pulse { animation: btnpulse 0.7s ease-in-out infinite; border-color: var(--gold); }
+  @media (max-width: 480px) {
+    #actions { left: 12px; bottom: 18px; }
+    .actbtn { width: 88px; height: 60px; }
+  }
+
   /* ---------- Screens / overlays ---------- */
   .screen {
     position: absolute; inset: 0; z-index: 20;
@@ -244,6 +269,12 @@
   <button class="dbtn mid"></button>
   <button class="dbtn right" data-dir="right">▶</button>
   <button class="dbtn down" data-dir="down">▼</button>
+</div>
+
+<!-- Bottom-left action buttons (big, thumb-reachable on mobile) -->
+<div id="actions" class="hidden">
+  <button class="actbtn undo" id="actUndo">↩<span>もどす</span></button>
+  <button class="actbtn reset" id="actReset">⟳<span>やりなおし</span></button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -625,12 +656,12 @@ function tryMove(intent) {
   const [dr, dc] = DIRS[dirName];
   const p = state.player;
   const nr = p.r + dr, nc = p.c + dc;
-  if (isWall(nr, nc) || isVoid(nr, nc)) { faceDir(p.obj, dr, dc); return; }
+  if (isWall(nr, nc) || isVoid(nr, nc)) { faceDir(p.obj, dr, dc, PLAYER_FRONT_PLUS_Z); return; }
   const pushed = boxAt(nr, nc);
   let movedBox = null;
   if (pushed) {
     const br = nr + dr, bc = nc + dc;
-    if (isWall(br, bc) || isVoid(br, bc) || boxAt(br, bc)) { faceDir(p.obj, dr, dc); return; }
+    if (isWall(br, bc) || isVoid(br, bc) || boxAt(br, bc)) { faceDir(p.obj, dr, dc, PLAYER_FRONT_PLUS_Z); return; }
     movedBox = pushed;
   }
   // record history for undo
@@ -639,7 +670,7 @@ function tryMove(intent) {
     box: movedBox ? { ref: movedBox, r: movedBox.r, c: movedBox.c } : null,
   });
 
-  faceDir(p.obj, dr, dc);
+  faceDir(p.obj, dr, dc, PLAYER_FRONT_PLUS_Z);
   state.animating = true;
   const dur = 0.14;
   // player
@@ -650,7 +681,7 @@ function tryMove(intent) {
   p.r = nr; p.c = nc;
   if (movedBox) {
     const br = nr + dr, bc = nc + dc;
-    faceDir(movedBox.obj, dr, dc);
+    faceDir(movedBox.obj, dr, dc, PET_FRONT_PLUS_Z);
     tween(movedBox.obj.position, 'x', worldX(movedBox.c), worldX(bc), dur, 0.12);
     tween(movedBox.obj.position, 'z', worldZ(movedBox.r), worldZ(br), dur, 0.12);
     movedBox.r = br; movedBox.c = bc;
@@ -660,11 +691,15 @@ function tryMove(intent) {
 }
 
 let onAnimEnd = null;
-function faceDir(obj, dr, dc) {
-  // These chinchilla GLB models face -Z by default (same convention as the source voxel-world,
-  // which orients every model with rotation.y = atan2(-dx, -dz)). Movement maps to world
-  // (x = +col, z = +row), so face the travel direction with atan2(-dc, -dr).
-  obj.userData.targetRot = Math.atan2(-dc, -dr);
+// Default forward axis of the GLB art. The pushed pets (pet_chinchilla_*) face -Z (verified from
+// the source voxel-world, which orients every mob with rotation.y = atan2(-dx,-dz)). The player
+// art (player_chinchilla_*) is authored facing +Z (toward the camera), i.e. the opposite way —
+// so the protagonist needs the flipped formula. Flip these if a model ever points the wrong way.
+const PET_FRONT_PLUS_Z = false;    // pushed chinchillas
+const PLAYER_FRONT_PLUS_Z = true;  // さくら (protagonist)
+function faceDir(obj, dr, dc, frontPlusZ) {
+  // movement maps to world (x = +col = dc, z = +row = dr); aim the model's nose down the travel dir
+  obj.userData.targetRot = frontPlusZ ? Math.atan2(dc, dr) : Math.atan2(-dc, -dr);
 }
 
 function undo() {
@@ -705,6 +740,7 @@ const elMenu = document.getElementById('menu');
 const elClear = document.getElementById('clear');
 const elHud = document.getElementById('hud');
 const elDpad = document.getElementById('dpad');
+const elActions = document.getElementById('actions');
 function menuVisible() { return !elMenu.classList.contains('hidden') || !elClear.classList.contains('hidden'); }
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
@@ -735,11 +771,11 @@ function renderMenu() {
 function startStage(diff, stage) {
   selDiff = diff;
   hide(elMenu); hide(elClear);
-  show(elHud); show(elDpad);
+  show(elHud); show(elDpad); show(elActions);
   buildLevel(diff, stage);
 }
 function openMenu() {
-  hide(elClear); hide(elHud); hide(elDpad);
+  hide(elClear); hide(elHud); hide(elDpad); hide(elActions);
   renderMenu(); show(elMenu);
 }
 function showClear() {
@@ -754,7 +790,7 @@ function showClear() {
   document.getElementById('clearStars').textContent = '★★★☆☆☆'.slice(3 - stars, 6 - stars);
   const hasNext = state.stage + 1 < LEVELS[state.diff].length;
   document.getElementById('nextBtn').style.display = hasNext ? '' : 'none';
-  hide(elHud); hide(elDpad);
+  hide(elHud); hide(elDpad); hide(elActions);
   show(elClear);
   renderMenu();
 }
@@ -773,7 +809,7 @@ function showDeadlock() {
   t.classList.add('show', 'danger');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show', 'danger'), 3600);
   // pulse the recovery buttons so it's obvious how to recover
-  ['hudUndo', 'hudReset'].forEach(id => {
+  ['hudUndo', 'hudReset', 'actUndo', 'actReset'].forEach(id => {
     const b = document.getElementById(id);
     b.classList.add('pulse'); setTimeout(() => b.classList.remove('pulse'), 3600);
   });
@@ -797,8 +833,12 @@ document.querySelectorAll('.dbtn[data-dir]').forEach(btn => {
   btn.addEventListener('mousedown', fire);
 });
 document.getElementById('hudMenu').onclick = openMenu;
-document.getElementById('hudUndo').onclick = undo;
-document.getElementById('hudReset').onclick = () => { if (state) buildLevel(state.diff, state.stage); };
+const doUndo = () => undo();
+const doReset = () => { if (state) buildLevel(state.diff, state.stage); };
+document.getElementById('hudUndo').onclick = doUndo;
+document.getElementById('hudReset').onclick = doReset;
+document.getElementById('actUndo').onclick = doUndo;
+document.getElementById('actReset').onclick = doReset;
 document.getElementById('nextBtn').onclick = () => startStage(state.diff, state.stage + 1);
 document.getElementById('retryBtn').onclick = () => startStage(state.diff, state.stage);
 document.getElementById('toMenuBtn').onclick = openMenu;
